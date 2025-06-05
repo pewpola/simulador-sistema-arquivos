@@ -91,3 +91,5 @@ nb-configuration.xml
 
 journal.log
 src/journal.log
+
+filesystem.dat

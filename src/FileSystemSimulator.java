@@ -1,98 +1,90 @@
 import java.util.*;
 
 public class FileSystemSimulator {
-    private Directory root;
-    private Journal journal;
-    private Directory currentDir;
-
-    public FileSystemSimulator() {
-        this.root = new Directory("/");
-        this.currentDir = root;
-        this.journal = new Journal("journal.log");
-    }
-
-    public void startShell() {
-        Scanner scanner = new Scanner(System.in);
-        while (true) {
-            System.out.print(currentDir.getPath() + "> ");
-            String input = scanner.nextLine().trim();
-            if (input.equals("exit")) break;
-            handleCommand(input);
-        }
-        scanner.close();
-    }
-
-    private void handleCommand(String input) {
-        String[] parts = input.split(" ");
-        String command = parts[0];
-        String[] args = Arrays.copyOfRange(parts, 1, parts.length);
-
-        try {
-            switch (command) {
-                case "mkdir": createDirectory(args[0]); break;
-                case "rmdir": removeDirectory(args[0]); break;
-                case "rename": rename(args[0], args[1]); break;
-                case "touch": createFile(args[0]); break;
-                case "rm": removeFile(args[0]); break;
-                case "cp": copyFile(args[0], args[1]); break;
-                case "ls": listFiles(); break;
-                case "cd": changeDirectory(args[0]); break;
-                default: System.out.println("Unknown command.");
-            }
-        } catch (Exception e) {
-            System.out.println("Error: " + e.getMessage());
-        }
-    }
-
-    private void createDirectory(String name) {
-        journal.log("mkdir " + name);
-        currentDir.addDirectory(new Directory(name, currentDir));
-    }
-
-    private void removeDirectory(String name) {
-        journal.log("rmdir " + name);
-        currentDir.removeDirectory(name);
-    }
-
-    private void rename(String oldName, String newName) {
-        journal.log("rename " + oldName + " " + newName);
-        currentDir.renameEntry(oldName, newName);
-    }
-
-    private void createFile(String name) {
-        journal.log("touch " + name);
-        currentDir.addFile(new MyFile(name));
-    }
-
-    private void removeFile(String name) {
-        journal.log("rm " + name);
-        currentDir.removeFile(name);
-    }
-
-    private void copyFile(String source, String target) {
-        journal.log("cp " + source + " " + target);
-        currentDir.copyFile(source, target);
-    }
-
-    private void listFiles() {
-        currentDir.listEntries();
-    }
-
-    private void changeDirectory(String path) {
-        if (path.equals("..")) {
-            if (currentDir.getParent() != null)
-                currentDir = currentDir.getParent();
-        } else {
-            Directory next = currentDir.getSubDirectory(path);
-            if (next != null)
-                currentDir = next;
-            else
-                System.out.println("Directory not found.");
-        }
-    }
+    private static Directory root;
+    private static Directory current;
+    private static Journal journal;
 
     public static void main(String[] args) {
-        FileSystemSimulator sim = new FileSystemSimulator();
-        sim.startShell();
+        journal = new Journal("journal.log");
+        root = journal.loadState();
+        if (root == null) {
+            root = new Directory("root");
+        }
+        current = root;
+
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> journal.saveState(root)));
+
+        Scanner scanner = new Scanner(System.in);
+        while (true) {
+            System.out.print(current.getPath() + "> ");
+            String input = scanner.nextLine().trim();
+            String[] parts = input.split("\\s+");
+            if (parts.length == 0 || parts[0].isEmpty()) continue;
+
+            String cmd = parts[0];
+            try {
+                if (cmd.equals("exit")) {
+                    journal.saveState(root);
+                    break;
+                } else if (cmd.equals("mkdir") && parts.length > 1) {
+                    Directory newDir = new Directory(parts[1], current);
+                    current.addDirectory(newDir);
+                    journal.log(input);
+                } else if (cmd.equals("rmdir") && parts.length > 1) {
+                    current.removeDirectory(parts[1]);
+                    journal.log(input);
+                } else if (cmd.equals("touch") && parts.length > 1) {
+                    current.addFile(new MyFile(parts[1]));
+                    journal.log(input);
+                } else if (cmd.equals("rm") && parts.length > 1) {
+                    current.removeFile(parts[1]);
+                    journal.log(input);
+                } else if (cmd.equals("rename") && parts.length > 2) {
+                    current.renameEntry(parts[1], parts[2]);
+                    journal.log(input);
+                } else if (cmd.equals("cp") && parts.length >= 3) {
+                    String source = parts[1];
+                    String target = parts[2];
+
+                    if (target.contains("/")) {
+                        String[] targetParts = target.split("/");
+                        String dirName = targetParts[0];
+                        String newName = targetParts.length > 1 ? targetParts[1] : source;
+
+                        Directory targetDir = current.getSubDirectory(dirName);
+                        if (targetDir == null) {
+                            System.out.println("Destination directory not found.");
+                        } else {
+                            current.copyFile(source, newName, targetDir);
+                            journal.log("cp " + source + " " + dirName + "/" + newName);
+                        }
+                    } else if (current.getDirectories().containsKey(target)) {
+                        Directory targetDir = current.getSubDirectory(target);
+                        current.copyFile(source, source, targetDir);
+                        journal.log("cp " + source + " " + target + "/" + source);
+                    } else {
+                        current.copyFile(source, target, current);
+                        journal.log("cp " + source + " " + target);
+                    }
+                } else if (cmd.equals("cd") && parts.length > 1) {
+                    if (parts[1].equals("..")) {
+                        if (current.getParent() != null)
+                            current = current.getParent();
+                    } else {
+                        Directory next = current.getSubDirectory(parts[1]);
+                        if (next != null) current = next;
+                        else System.out.println("Directory not found.");
+                    }
+                } else if (cmd.equals("ls")) {
+                    current.listEntries();
+                } else {
+                    System.out.println("Comando inválido");
+                }
+            } catch (Exception e) {
+                System.out.println("Erro: " + e.getMessage());
+            }
+        }
+        scanner.close();
     }
 }

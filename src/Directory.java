@@ -1,6 +1,7 @@
 import java.util.*;
+import java.io.*;
 
-public class Directory {
+class Directory implements Serializable {
     private String name;
     private Directory parent;
     private Map<String, Directory> directories = new HashMap<>();
@@ -45,11 +46,11 @@ public class Directory {
         }
     }
 
-    public void copyFile(String source, String target) {
+    public void copyFile(String source, String target, Directory destination) {
         if (files.containsKey(source)) {
             MyFile file = files.get(source);
             MyFile copy = new MyFile(target, file.getContent());
-            files.put(target, copy);
+            destination.addFile(copy);
         } else {
             throw new IllegalArgumentException("Source file not found");
         }
@@ -78,5 +79,13 @@ public class Directory {
 
     public void setName(String newName) {
         this.name = newName;
+    }
+
+    public Map<String, Directory> getDirectories() {
+        return directories;
+    }
+
+    public Map<String, MyFile> getFiles() {
+        return files;
     }
 } 
